@@ -8,8 +8,8 @@
 //import lombok.Getter;
 //import nuno.ExceptionHandler;
 //import nuno.Helpers;
-//import nuno.fileserver.FileServer;
-//import nuno.fileserver.FileServerImpl;
+//import com.nsantos.simplehttpserver.FileServer;
+//import com.nsantos.simplehttpserver.FileServerImpl;
 //import org.apache.commons.io.IOUtils;
 //import org.slf4j.Logger;
 //import org.slf4j.LoggerFactory;

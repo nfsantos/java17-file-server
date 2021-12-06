@@ -1,4 +1,4 @@
-package nuno;
+package com.nsantos.httpfileserver;
 
 import com.typesafe.config.Config;
 import org.slf4j.Logger;
@@ -15,9 +15,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
-import static nuno.Constants.*;
-import static nuno.ThreadUtils.newBoundedCachedThreadPool;
-import static nuno.ThreadUtils.newSingleThreadExecutor;
+import static com.nsantos.httpfileserver.ThreadUtils.newBoundedCachedThreadPool;
+import static com.nsantos.httpfileserver.ThreadUtils.newSingleThreadExecutor;
 
 class TPCServer {
     private static final Logger logger = LoggerFactory.getLogger(TPCServer.class);
@@ -33,7 +32,7 @@ class TPCServer {
     public TPCServer(Consumer<Socket> connectionHandler, Config config) {
         this.config = config;
         this.connectionHandler = connectionHandler;
-        var threadPoolSize = config.getInt(WEBSERVER_THREAD_POOL_SIZE);
+        var threadPoolSize = config.getInt(Constants.WEBSERVER_THREAD_POOL_SIZE);
         this.threadPool = newBoundedCachedThreadPool(1, threadPoolSize, "http-handler");
         this.acceptorThread = newSingleThreadExecutor("acceptor");
     }
@@ -47,8 +46,8 @@ class TPCServer {
         if (port == 0) {
             var r = new Random();
             var isBound = false;
-            for (int i = 1; i <= RANDOM_PORT_MAX_ATTEMPTS && !isBound; i++) {
-                var randomPort = RANDOM_PORT_RANGE_LOWER + r.nextInt(RANDOM_PORT_RANGE_UPPER - RANDOM_PORT_RANGE_LOWER);
+            for (int i = 1; i <= Constants.RANDOM_PORT_MAX_ATTEMPTS && !isBound; i++) {
+                var randomPort = Constants.RANDOM_PORT_RANGE_LOWER + r.nextInt(Constants.RANDOM_PORT_RANGE_UPPER - Constants.RANDOM_PORT_RANGE_LOWER);
                 try {
                     logger.debug("Trying to bind at port {}, Attempt {}", randomPort, i);
                     ss = new ServerSocket(randomPort, 0);

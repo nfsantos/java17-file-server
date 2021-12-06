@@ -1,4 +1,4 @@
-package nuno;
+package com.nsantos.httpfileserver;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
@@ -23,7 +23,7 @@ public class ThreadUtils {
                 maxSize,
                 60L,
                 TimeUnit.SECONDS,
-                new SynchronousQueue<Runnable>(),
+                new SynchronousQueue<>(),
                 newThreadFactory(name, true)
         );
     }
@@ -31,9 +31,7 @@ public class ThreadUtils {
     public static ThreadFactory newThreadFactory(String name, Boolean daemon) {
         return new ThreadFactoryBuilder()
                 .setNameFormat(name + "-%d")
-                .setUncaughtExceptionHandler((Thread thread, Throwable t) -> {
-                    logger.warn("Uncaught exception on thread: {}", thread, t);
-                })
+                .setUncaughtExceptionHandler((Thread thread, Throwable t) -> logger.warn("Uncaught exception on thread: {}", thread, t))
                 .setDaemon(daemon)
                 .build();
     }

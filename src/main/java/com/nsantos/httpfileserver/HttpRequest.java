@@ -1,4 +1,4 @@
-package nuno;
+package com.nsantos.httpfileserver;
 
 
 import java.net.URI;

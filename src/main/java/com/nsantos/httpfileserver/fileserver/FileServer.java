@@ -1,4 +1,4 @@
-package nuno.fileserver;
+package com.nsantos.httpfileserver.fileserver;
 
 import java.io.IOException;
 import java.nio.file.Path;

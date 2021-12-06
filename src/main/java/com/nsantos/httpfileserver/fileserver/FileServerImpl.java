@@ -1,4 +1,4 @@
-package nuno.fileserver;
+package com.nsantos.httpfileserver.fileserver;
 
 import com.typesafe.config.Config;
 import lombok.Getter;
@@ -10,7 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.Stream;
 
-import static nuno.Constants.FILE_SERVER_BASE_PATH;
+import static com.nsantos.httpfileserver.Constants.FILE_SERVER_BASE_PATH;
 
 public class FileServerImpl implements FileServer {
     private static final Logger logger = LoggerFactory.getLogger(FileServerImpl.class);

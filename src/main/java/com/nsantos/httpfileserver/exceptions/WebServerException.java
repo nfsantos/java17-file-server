@@ -1,4 +1,4 @@
-package nuno.exceptions;
+package com.nsantos.httpfileserver.exceptions;
 
 import lombok.Getter;
 

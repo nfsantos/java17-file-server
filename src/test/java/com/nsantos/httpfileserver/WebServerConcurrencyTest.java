@@ -1,4 +1,4 @@
-package nuno;
+package com.nsantos.httpfileserver;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -6,12 +6,12 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// Integration test
-public class WebServerIT {
+public class WebServerConcurrencyTest {
 
-    private static final Logger logger = LoggerFactory.getLogger(WebServerIT.class);
+    private static final Logger logger = LoggerFactory.getLogger(WebServerConcurrencyTest.class);
 
     @BeforeAll
     static void init() {
@@ -25,6 +25,6 @@ public class WebServerIT {
 
     @Test
     void myTest() {
-        assertTrue(1 == 1);
+        assertEquals(1, 1);
     }
 }

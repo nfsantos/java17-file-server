@@ -1,10 +1,10 @@
-package nuno;
+package com.nsantos.httpfileserver;
 
+import com.nsantos.httpfileserver.exceptions.ExceptionHandler;
+import com.nsantos.httpfileserver.fileserver.FileServer;
+import com.nsantos.httpfileserver.fileserver.FileServerImpl;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
-import nuno.exceptions.ExceptionHandler;
-import nuno.fileserver.FileServer;
-import nuno.fileserver.FileServerImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,7 +22,7 @@ public class HttpFileServerMain {
         return this.tpcServer.getPort();
     }
 
-    public HttpFileServerMain(FileServerHandler fileServerHandler, Config config) throws IOException {
+    public HttpFileServerMain(FileServerHandler fileServerHandler, Config config) {
         this.fileServerHandler = fileServerHandler;
         this.config = config;
     }

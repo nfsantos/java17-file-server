@@ -1,10 +1,10 @@
-package nuno;
+package com.nsantos.httpfileserver;
 
+import com.nsantos.httpfileserver.exceptions.ExceptionHandler;
+import com.nsantos.httpfileserver.fileserver.FileServer;
 import com.typesafe.config.Config;
 import lombok.Getter;
-import nuno.exceptions.ExceptionHandler;
-import nuno.fileserver.FileServer;
-import org.apache.hc.core5.http.HttpHeaders;
+import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,8 +12,10 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.Socket;
-import java.net.URLConnection;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,8 +26,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import static nuno.HttpResponses.sendResponse;
-import static nuno.HttpConstants.HTTP_APPLICATION_OCTET_STREAM;
+import static com.nsantos.httpfileserver.HttpResponses.sendResponse;
 
 
 class FileServerHandler implements Consumer<Socket> {
@@ -35,7 +36,7 @@ class FileServerHandler implements Consumer<Socket> {
     private final ExceptionHandler exceptionHandler;
 
     @Getter
-    private String rootPath = "/file-server";
+    private final String rootPath = "/file-server";
 
     public FileServerHandler(FileServer fileServer, ExceptionHandler exceptionHandler, Config conf) {
         this.fileServer = fileServer;
@@ -45,12 +46,17 @@ class FileServerHandler implements Consumer<Socket> {
     @Override
     public void accept(Socket socket) {
         logger.debug("Request from {}", socket.getRemoteSocketAddress());
-        try {
-            handleOneRequest(socket);
+        try (var reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+             var os = socket.getOutputStream()) {
+            while (true) {
+                // TODO: Graceful return at end of stream?
+                handleOneRequest(reader, os);
+            }
         } catch (Throwable t) {
             logger.warn("Failed with exception", t);
         } finally {
             try {
+                logger.info("Closing socket");
                 socket.close();
             } catch (IOException e) {
                 logger.warn("Suppressing error closing socket: {}", e.toString());
@@ -58,45 +64,50 @@ class FileServerHandler implements Consumer<Socket> {
         }
     }
 
-    private void handleOneRequest(Socket socket) throws IOException {
-        try (var reader = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
-            var requestLine = RequestLine.createHeader(reader.readLine());
-            var headers = new HashMap<String, List<String>>();
-            var line = reader.readLine();
-            while (true) {
-                line = reader.readLine();
-                if (line.isBlank()) {
-                    break;
-                }
-                var parts = line.split(": ");
-                var values = List.of(parts[1].split(";"));
-                logger.info(">> {} {}", parts[0], values);
-                headers.put(parts[0], values);
+    private void handleOneRequest(BufferedReader reader, OutputStream os) throws IOException {
+        logger.debug("Waiting for HTTP request");
+        var requestLine = RequestLine.createHeader(reader.readLine());
+        var headers = new HashMap<String, List<String>>();
+        var line = reader.readLine();
+        while (true) {
+            line = reader.readLine();
+            if (line.isBlank()) {
+                break;
             }
-            handle(requestLine, headers, socket);
+            var parts = line.split(": ");
+            var values = List.of(parts[1].split(";"));
+            logger.info(">> {} {}", parts[0], values);
+            headers.put(parts[0], values);
         }
+        handle(requestLine, headers, os);
     }
 
-    public void handle(RequestLine requestLine, Map<String, List<String>> headers, Socket socket) throws IOException {
+    public void handle(RequestLine requestLine, Map<String, List<String>> headers, OutputStream os) throws IOException {
         try {
             var method = requestLine.method().toUpperCase(Locale.ROOT);
-            logger.info("Request URI: {}, Method: {}, Headers: {}", requestLine.uri(), method);
+            logger.info("Request URI: {}, Method: {}", requestLine.uri(), method);
             if (!requestLine.uri().getPath().startsWith(rootPath)) {
-                HttpResponses.sendResponse(socket, HttpStatus.SC_NOT_FOUND, new HashMap<>());
+                HttpResponses.sendResponse(os, HttpStatus.SC_NOT_FOUND, new HashMap<>());
             } else {
                 switch (method) {
-                    case "GET" -> handleGet(requestLine, headers, socket);
-                    case "HEAD" -> new UnsupportedOperationException();
+                    case "GET" -> handleGet(requestLine, headers, os);
+                    case "HEAD" -> handleHead(requestLine, headers, os);
                     default -> throw new UnsupportedOperationException();
                 }
             }
         } catch (Throwable t) {
-            exceptionHandler.handleException(t, socket);
+            exceptionHandler.handleException(t, os);
         }
     }
 
-    private void handleGet(RequestLine requestLine, Map<String, List<String>> requestHeaders, Socket socket) throws IOException {
-        var requestPath = Path.of(requestLine.uri().toString());
+    private void handleHead(RequestLine requestLine, Map<String, List<String>> headers, OutputStream os) {
+        throw new UnsupportedOperationException();
+    }
+
+    private void handleGet(RequestLine requestLine, Map<String, List<String>> requestHeaders, OutputStream os) throws IOException {
+        var decoded = URLDecoder.decode(requestLine.uri().toString(), StandardCharsets.UTF_8);
+        logger.info("URI: {}, Decoded: {}", requestLine.uri(), decoded);
+        var requestPath = Path.of(decoded);
         var rootPath = Path.of(this.rootPath);
         var relativePath = rootPath.relativize(requestPath).toString();
 
@@ -106,16 +117,8 @@ class FileServerHandler implements Consumer<Socket> {
             if (fileServer.isFile(relativePath)) {
                 var requestedFile = fileServer.getFile(relativePath);
                 // TODO 2: support range requests
-                var contentType = URLConnection.guessContentTypeFromName(requestedFile.toString());
-                if (contentType == null) {
-                    contentType = HTTP_APPLICATION_OCTET_STREAM;
-                }
-                logger.info("Response: {}, content type: {} ", requestedFile, contentType);
-                var headers = new HashMap<String, String>();
-                headers.put(HttpHeaders.CONTENT_TYPE, contentType);
-                logger.info("Response headers: {}", headers.entrySet());
 
-                sendResponse(socket, HttpStatus.SC_OK, headers, requestedFile);
+                sendResponse(os, HttpStatus.SC_OK, new HashMap<>(), requestedFile);
 
             } else if (fileServer.isDirectory(relativePath)) {
                 var fileList = fileServer.getDirectoryListing(relativePath).map(p -> {
@@ -124,23 +127,23 @@ class FileServerHandler implements Consumer<Socket> {
                         fileName += "/";
                     }
                     return directoryListingLineTemplate.formatted(fileName, fileName);
-                }).collect(Collectors.joining());
+                }).collect(Collectors.joining("\n"));
                 var body = directoryListingTemplate.formatted(relativePath, fileList);
-                HttpResponses.sendResponse(socket, HttpStatus.SC_OK, new HashMap<>(), body);
+                HttpResponses.sendResponse(os, HttpStatus.SC_OK, new HashMap<>(), body, ContentType.TEXT_HTML.withCharset(StandardCharsets.UTF_8));
 
             } else {
                 logger.debug("File not found {}", relativePath);
-                HttpResponses.sendResponse(socket, HttpStatus.SC_NOT_FOUND, new HashMap<>());
+                HttpResponses.sendResponse(os, HttpStatus.SC_NOT_FOUND, new HashMap<>());
             }
         } catch (AccessDeniedException ex) {
             logger.debug("Access denied: {}", ex.toString());
-            HttpResponses.sendResponse(socket, HttpStatus.SC_FORBIDDEN, new HashMap<>());
+            HttpResponses.sendResponse(os, HttpStatus.SC_FORBIDDEN, new HashMap<>());
         }
     }
 
-    private static String directoryListingLineTemplate = "<li><a href=\"%s\">%s</a></li>";
+    private static final String directoryListingLineTemplate = "<li><a href=\"%s\">%s</a></li>";
 
-    private static String directoryListingTemplate = """
+    private static final String directoryListingTemplate = """
             <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
             <html>
             <head>
