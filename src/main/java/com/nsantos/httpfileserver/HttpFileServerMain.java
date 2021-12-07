@@ -14,43 +14,42 @@ import java.util.concurrent.ExecutionException;
 public class HttpFileServerMain {
     private static final Logger logger = LoggerFactory.getLogger(HttpFileServerMain.class);
 
-    private final FileServerHandler fileServerHandler;
+    private final FileServerHandlerFactory fileServerHandler;
     private final Config config;
-    private TPCServer tpcServer;
+    private TCPServer tcpServer;
 
     public int getPort() {
-        return this.tpcServer.getPort();
+        return this.tcpServer.getPort();
     }
 
-    public HttpFileServerMain(FileServerHandler fileServerHandler, Config config) {
+    public HttpFileServerMain(FileServerHandlerFactory fileServerHandler, Config config) {
         this.fileServerHandler = fileServerHandler;
         this.config = config;
     }
 
     private void createServer() throws IOException {
-        this.tpcServer = new TPCServer(this.fileServerHandler, config);
-        this.tpcServer.start();
+        this.tcpServer = new TCPServer(this.fileServerHandler, config);
+        this.tcpServer.start();
     }
 
     void start() throws IOException {
-        logger.info("Starting HTTP Server");
         createServer();
     }
 
     void join() throws ExecutionException, InterruptedException {
-        this.tpcServer.join();
+        this.tcpServer.join();
     }
 
-    public void stop() throws IOException {
+    public void stop() throws IOException, InterruptedException {
         logger.info("Stopping HTTP Server");
-        tpcServer.stop();
+        tcpServer.stop();
     }
 
     public static void main(String[] args) throws IOException, ExecutionException, InterruptedException {
         Config conf = ConfigFactory.load();
         FileServer fileServer = new FileServerImpl(conf);
         ExceptionHandler exceptionHandler = new ExceptionHandler();
-        FileServerHandler fsc = new FileServerHandler(fileServer, exceptionHandler, conf);
+        FileServerHandlerFactory fsc = new FileServerHandlerFactory(fileServer, exceptionHandler, conf);
         var server = new HttpFileServerMain(fsc, conf);
         server.start();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -58,7 +57,7 @@ public class HttpFileServerMain {
                 logger.info("Shutting down");
                 server.stop();
             } catch (Throwable t) {
-                logger.warn("Error closing TPCServer", t);
+                logger.warn("Error closing TCPServer", t);
             }
         }));
         server.join();

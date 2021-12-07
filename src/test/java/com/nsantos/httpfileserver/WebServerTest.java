@@ -9,7 +9,6 @@ import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpHeaders;
-import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -58,16 +57,12 @@ public class WebServerTest {
         return testConfig.withFallback(systemConfig);
     }
 
-    private URI webServerAddress() {
+    private URI fileServerAddress() {
         return URI.create("http://localhost:%d".formatted(webServer.getPort()));
     }
 
-    private URI fileServerBasePath() {
-        return URI.create("http://localhost:%d/file-server".formatted(webServer.getPort()));
-    }
-
     private URI fileServerPath(String segment) {
-        return URI.create("http://localhost:%d/file-server/%s".formatted(webServer.getPort(), segment));
+        return URI.create("http://localhost:%d/%s".formatted(webServer.getPort(), segment));
     }
 
     @BeforeAll
@@ -83,7 +78,7 @@ public class WebServerTest {
         ));
         FileServer fileServer = new FileServerImpl(conf);
         ExceptionHandler exceptionHandler = new ExceptionHandler();
-        FileServerHandler fsc = new FileServerHandler(fileServer, exceptionHandler, conf);
+        FileServerHandlerFactory fsc = new FileServerHandlerFactory(fileServer, exceptionHandler, conf);
         webServer = new HttpFileServerMain(fsc, conf);
         webServer.start();
         // TODO: How to send Connection header
@@ -93,7 +88,7 @@ public class WebServerTest {
     }
 
     @AfterAll
-    static void shutdown() throws IOException {
+    static void shutdown() throws IOException, InterruptedException {
         logger.info("Shutting down web server");
         webServer.stop();
     }
@@ -136,7 +131,7 @@ public class WebServerTest {
     @Test
     void rootListing() throws IOException, InterruptedException {
         var request = HttpRequest.newBuilder()
-                .uri(fileServerBasePath())
+                .uri(fileServerAddress())
                 .GET()
                 .build();
         logger.info("Connecting to: {}", request);
@@ -171,19 +166,6 @@ public class WebServerTest {
             <hr>
             </body>
             </html>""";
-
-    @Test
-    void wrongTopPath() throws IOException, InterruptedException {
-        var request = HttpRequest.newBuilder()
-                .uri(webServerAddress())
-                .GET()
-                .build();
-        logger.info("Connecting to: {}", request);
-        HttpResponse<String> httpResponse = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        assertEquals(HttpStatus.SC_NOT_FOUND, httpResponse.statusCode());
-        var body = httpResponse.body();
-        assertEquals("", body);
-    }
 
     private static Stream<Arguments> provideArgsForGetFile() {
         return Stream.of(

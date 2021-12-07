@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.*;
 
 public class ThreadUtils {
-    private static final Logger logger = LoggerFactory.getLogger(TPCServer.class);
+    private static final Logger logger = LoggerFactory.getLogger(TCPServer.class);
 
     public static ExecutorService newSingleThreadExecutor(String name) {
         return Executors.newSingleThreadExecutor(r -> {
