@@ -19,8 +19,9 @@ public class HttpResponses {
     private static final Logger logger = LoggerFactory.getLogger(HttpResponses.class);
 
     private static void sendHeader(OutputStream os, int status, HashMap<String, String> headers) throws IOException {
+        // Use only US_ASCII characters: https://datatracker.ietf.org/doc/html/rfc7230#section-3
+        var writer = new OutputStreamWriter(os, StandardCharsets.US_ASCII);
         // Write request header
-        var writer = new OutputStreamWriter(os);
         var statusString = HttpConstants.HTTP_STATUS.get(status);
         if (statusString == null) {
             logger.warn("Missing status string for status {}", status);
@@ -40,23 +41,44 @@ public class HttpResponses {
         }
         writer.write(Constants.CRLF);
         writer.flush();
+        // Do not close the output stream, this is the stream of the socket, we must keep it open to process further requests.
     }
 
+    /**
+     * Writes an HTTP response with a given file as the to an OutputStream
+     *
+     * @param os      The output stream where to write the response
+     * @param status  The status to send in the response
+     * @param headers The headers of the response
+     * @param file    The file to send as a body
+     * @throws IOException
+     */
     public static void sendResponse(OutputStream os, int status, HashMap<String, String> headers, Path file) throws IOException {
-        var bodySize = Files.size(file);
         var contentType = URLConnection.guessContentTypeFromName(file.toString());
         if (contentType == null) {
+            // Could not guess, default to a generic content type, just a series of bytes
             contentType = ContentType.APPLICATION_OCTET_STREAM.toString();
         }
-        logger.info("Response: {}, content type: {} ", file, contentType);
+        var bodySize = Files.size(file);
+        logger.debug("Sending file in HTTP response. File {}, Content Type: {}, Size: {}", file, contentType, bodySize);
         headers.put(HttpHeaders.CONTENT_LENGTH, Long.toString(bodySize));
         headers.put(HttpHeaders.CONTENT_TYPE, contentType);
         sendHeader(os, status, headers);
         Files.copy(file, os);
     }
 
+    /**
+     * Writes an HTTP response with a body to an OutputStream.
+     *
+     * @param os          The output stream where to write the response
+     * @param status      The status to send in the response
+     * @param headers     The headers of the response
+     * @param body        The body of the response. Must be encoded in US_ASCII
+     * @param contentType The content type
+     * @throws IOException
+     */
     public static void sendResponse(OutputStream os, int status, HashMap<String, String> headers, String body, ContentType contentType) throws IOException {
-        var bodyArray = body.getBytes(StandardCharsets.UTF_8);
+        var bodyArray = body.getBytes(StandardCharsets.US_ASCII);
         headers.put(HttpHeaders.CONTENT_LENGTH, Long.toString(bodyArray.length));
         headers.put(HttpHeaders.CONTENT_TYPE, contentType.toString());
         sendHeader(os, status, headers);
@@ -64,6 +86,14 @@ public class HttpResponses {
         os.flush();
     }
 
+    /**
+     * Writes an HTTP response without a body to an OutputStream
+     *
+     * @param os      The output stream where to write the response
+     * @param status  The status to send in the response
+     * @param headers The headers of the response
+     * @throws IOException
+     */
     public static void sendResponse(OutputStream os, int status, HashMap<String, String> headers) throws IOException {
         headers.put(HttpHeaders.CONTENT_LENGTH, "0");
         sendHeader(os, status, headers);

@@ -1,14 +1,9 @@
 package com.nsantos.httpfileserver;
 
-
 import java.net.URI;
+import java.util.Map;
 
-record RequestLine(String method, URI uri, String httpVersion) {
-    static RequestLine createHeader(String line) {
-        var parts = line.split(" ");
-        return new RequestLine(parts[0], URI.create(parts[1]), parts[2]);
-    }
+record HttpRequest(String method, URI uri, String httpVersion, Map<String, String> headers) {
 }
 
-public class HttpRequest {
-}
+

@@ -49,7 +49,9 @@ And provided to the application by setting the system property `config.file`, fo
 
 
 
-
 ### Future work
 
-- 
+- Use Guice for DI, instead of manually passing the dependencies in the constructor.
+- Support range requests
+- Consider using Java NIO SocketChannels and FileChannel to do zero-copy transfer from the file system cache to the socket.
+

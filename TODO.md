@@ -7,15 +7,14 @@
 HTTP keepalive 
 
 Configuration
-- Thread pool size
-- Backlog size
+- Thread pool size configuration
+- Test for multithread access
+- Test for keep-alive. How to do this using Java HTTP Client? Is there a way to know if multiple requests are using the same connection? 
 
-Functionality
-- Range requests
 
 Command line arguments. 
 
-Use Guice for DI, helps with testing.
+
 
 Optional, if time allows it
 - Docker image packaging
