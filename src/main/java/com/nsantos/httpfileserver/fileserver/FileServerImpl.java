@@ -12,9 +12,15 @@ import java.util.stream.Stream;
 
 import static com.nsantos.httpfileserver.Constants.FILE_SERVER_BASE_PATH;
 
+/**
+ * A simple implementation of a file server service, which delegates to the Java NIO API.
+ */
 public class FileServerImpl implements FileServer {
     private static final Logger logger = LoggerFactory.getLogger(FileServerImpl.class);
 
+    /**
+     * The base path used to resolve all the relative paths received as arguments.
+     */
     @Getter
     private final Path basePath;
 

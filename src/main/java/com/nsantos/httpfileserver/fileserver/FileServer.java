@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.stream.Stream;
 
+/**
+ * Definition of a file server service.
+ */
 public interface FileServer {
     Path getBasePath();
 

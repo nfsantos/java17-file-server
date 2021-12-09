@@ -13,6 +13,7 @@ public interface Constants {
      * Base path from where to server files
      */
     String FILE_SERVER_BASE_PATH = "com.nsantos.httpfileserver.base-path";
+    String KEEP_ALIVE_TIMEOUT = "com.nsantos.httpfileserver.keep-alive-timeout";
 
     /* Start of port range for random ports (inclusive).  */
     int RANDOM_PORT_RANGE_LOWER = 40000;

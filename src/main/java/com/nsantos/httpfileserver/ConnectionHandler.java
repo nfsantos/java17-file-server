@@ -3,28 +3,28 @@ package com.nsantos.httpfileserver;
 import com.nsantos.httpfileserver.exceptions.ExceptionHandler;
 import com.nsantos.httpfileserver.fileserver.FileServer;
 import com.typesafe.config.Config;
-import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.net.Socket;
-import java.net.SocketException;
-import java.net.URI;
-import java.net.URLDecoder;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import static com.nsantos.httpfileserver.HttpResponses.sendResponse;
+import static com.nsantos.httpfileserver.HttpConstants.TEXT_HTML_UTF8;
 
-class FileServerHandler {
-    private static final Logger logger = LoggerFactory.getLogger(FileServerHandler.class);
+/**
+ * Processes a sequence of HTTP requests received in a given socket.
+ */
+class ConnectionHandler {
+    private static final Logger logger = LoggerFactory.getLogger(ConnectionHandler.class);
 
     private static final String directoryListingLineTemplate = "<li><a href=\"%s\">%s</a></li>";
 
@@ -36,7 +36,7 @@ class FileServerHandler {
             <title>Directory listing for %s</title>
             </head>
             <body>
-            <h1>Directory listing for /</h1>
+            <h1>Directory listing for %s</h1>
             <hr>
             <ul>
             %s
@@ -46,21 +46,40 @@ class FileServerHandler {
             </html>
             """;
 
+    // Enforces lifecycle, prevents callers from using this instance after being closed.
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    private FileServer fileServer;
-    private ExceptionHandler exceptionHandler;
-    private Config conf;
-    private Socket socket;
+    private final FileServer fileServer;
+    private final ExceptionHandler exceptionHandler;
+    private final Socket socket;
+    private final HttpResponseWriter httpResponseWriter;
+    private final int keepAliveTimeoutMillis;
 
-    public FileServerHandler(FileServer fileServer, ExceptionHandler exceptionHandler, Config conf, Socket socket) {
+    /**
+     * @param fileServer
+     * @param exceptionHandler
+     * @param config
+     * @param socket
+     */
+    public ConnectionHandler(FileServer fileServer, ExceptionHandler exceptionHandler, HttpResponseWriter httpResponseWriter, Config config, Socket socket) {
         this.fileServer = fileServer;
         this.exceptionHandler = exceptionHandler;
-        this.conf = conf;
+        this.httpResponseWriter = httpResponseWriter;
         this.socket = socket;
+        var keepAliveTimeoutMillisLong = config.getDuration(Constants.KEEP_ALIVE_TIMEOUT, TimeUnit.MILLISECONDS);
+        if (keepAliveTimeoutMillisLong > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Invalid value for %s: %d millis. Must be smaller than %d".formatted(Constants.KEEP_ALIVE_TIMEOUT, keepAliveTimeoutMillisLong, Integer.MAX_VALUE));
+        }
+        this.keepAliveTimeoutMillis = (int) keepAliveTimeoutMillisLong;
     }
 
-    public void start() {
+    /**
+     * Starts processing requests. This method will run until the underlying socket is closed, either by a client
+     * disconnection or by being closed locally by a call to stop().
+     * <p>
+     * The calling thread is used to serve requests.
+     */
+    public void handleRequests() throws SocketException {
         logger.debug("Processing requests from {}", socket.getRemoteSocketAddress());
         var originalName = Thread.currentThread().getName();
         Thread.currentThread().setName(originalName + "-" + socket.getRemoteSocketAddress());
@@ -75,12 +94,17 @@ class FileServerHandler {
          * could potentially be binary, so we cannot read it with a reader, it would have to be read directly with the
          * input stream.
          */
+
+        // Set the socket to timeout
+        socket.setSoTimeout(keepAliveTimeoutMillis);
         try (var reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
              var bos = new BufferedOutputStream(socket.getOutputStream())) {
             var endOfInput = false;
             while (!endOfInput) {
                 endOfInput = handleOneRequest(reader, bos);
             }
+        } catch (SocketTimeoutException ex) {
+            logger.info("Timeout waiting for next request, closing connection.");
         } catch (SocketException ex) {
             if (!closed.get()) {
                 logger.warn("Exception reading from socket", ex);
@@ -89,10 +113,9 @@ class FileServerHandler {
             logger.warn("Exception reading from socket", ex);
         } finally {
             Thread.currentThread().setName(originalName);
-            if (!socket.isClosed()) {
+            if (!closed.get()) {
                 try {
-                    logger.info("Closing socket {}", socket);
-                    socket.close();
+                    this.stop();
                 } catch (IOException e) {
                     logger.warn("Suppressing error closing socket: {}", e.toString());
                 }
@@ -100,6 +123,11 @@ class FileServerHandler {
         }
     }
 
+    /**
+     * Stops the handler by closing the underlying socket.
+     *
+     * @throws IOException
+     */
     public void stop() throws IOException {
         if (closed.compareAndSet(false, true)) {
             logger.debug("Closing {}", socket);
@@ -110,8 +138,10 @@ class FileServerHandler {
     }
 
     /**
-     * @param reader
-     * @param os
+     * Reads and processes a single request.
+     *
+     * @param reader Where to read the request from
+     * @param os     Where to write the response
      * @return true if it reached end of input, false if there may be more requests.
      * @throws IOException
      */
@@ -195,7 +225,7 @@ class FileServerHandler {
             if (fileServer.isFile(requestPath)) {
                 // Send the file
                 var requestedFile = fileServer.getFile(requestPath);
-                sendResponse(os, HttpStatus.SC_OK, new HashMap<>(), requestedFile);
+                httpResponseWriter.sendResponse(os, HttpStatus.SC_OK, new HashMap<>(), requestedFile);
 
             } else if (fileServer.isDirectory(requestPath)) {
                 // Send a directory listing
@@ -206,16 +236,16 @@ class FileServerHandler {
                     }
                     return directoryListingLineTemplate.formatted(fileName, fileName);
                 }).collect(Collectors.joining("\n"));
-                var body = directoryListingTemplate.formatted(requestPath, fileList);
-                HttpResponses.sendResponse(os, HttpStatus.SC_OK, new HashMap<>(), body, ContentType.TEXT_HTML.withCharset(StandardCharsets.UTF_8));
+                var body = directoryListingTemplate.formatted("/" + requestPath, "/" + requestPath, fileList);
+                httpResponseWriter.sendResponse(os, HttpStatus.SC_OK, new HashMap<>(), body.getBytes(StandardCharsets.UTF_8), TEXT_HTML_UTF8);
 
             } else {
                 logger.debug("File not found {}", requestPath);
-                HttpResponses.sendResponse(os, HttpStatus.SC_NOT_FOUND, new HashMap<>());
+                httpResponseWriter.sendResponse(os, HttpStatus.SC_NOT_FOUND, new HashMap<>());
             }
         } catch (AccessDeniedException ex) {
             logger.debug("Access denied: {}", ex.toString());
-            HttpResponses.sendResponse(os, HttpStatus.SC_FORBIDDEN, new HashMap<>());
+            httpResponseWriter.sendResponse(os, HttpStatus.SC_FORBIDDEN, new HashMap<>());
         }
     }
 
