@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+SCRIPT_HOME="$(cd "$(dirname "$0")"; pwd)"
+cd "${SCRIPT_HOME}"
+
 if [[ "$#" -ne 1 ]]; then
   echo "No arguments provided, serving from current directory"
   base_server_dir="$(pwd)"

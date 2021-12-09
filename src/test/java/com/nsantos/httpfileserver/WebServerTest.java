@@ -101,8 +101,6 @@ public class WebServerTest {
         var body = httpResponse.body();
         assertEquals("", body);
         var headers = httpResponse.headers().map();
-        logger.info("Headers {}", headers);
-        logger.info("File: {}", body);
     }
 
     @Test
@@ -188,10 +186,10 @@ public class WebServerTest {
         var a = provideArgsForGetFile().toArray(Arguments[]::new);
         var totalRequests = 100;
         var pool = Executors.newFixedThreadPool(8, ThreadUtils.newThreadFactory("test-client", true));
-        var cs = new ExecutorCompletionService(pool);
+        var cs = new ExecutorCompletionService<Integer>(pool);
         for (int i = 0; i < totalRequests; i++) {
             final var taskIndex = i;
-            cs.submit((Callable<Integer>) () -> {
+            cs.submit(() -> {
                 var arg = a[taskIndex % a.length];
                 var fileName = (String) arg.get()[0];
                 var contentType = (ContentType) arg.get()[1];
@@ -202,7 +200,6 @@ public class WebServerTest {
         for (int i = 0; i < totalRequests; i++) {
             try {
                 var taskIndex = cs.poll(10, TimeUnit.SECONDS).get();
-                logger.info("Task completed {}. Number of tasks: {}", taskIndex, i);
             } catch (ExecutionException e) {
                 throw e.getCause();
             }

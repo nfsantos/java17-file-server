@@ -83,19 +83,24 @@ class ConnectionHandler {
         logger.debug("Processing requests from {}", socket.getRemoteSocketAddress());
         var originalName = Thread.currentThread().getName();
         Thread.currentThread().setName(originalName + "-" + socket.getRemoteSocketAddress());
-        /*  We need to handle multiple requests in this connection, so we need to handle the input and output streams carefully.
-         * 1) We should not close them while processing a request. So if we wrap them in another stream for convenience,
-         *   do not close that stream
-         * 2) We must be carefully in
+        /*  We have to read/write multiple requests in this connection, which requires careful handling of the input/output
+         * streams.
+         * 1) We should not close the streams while processing a request. So if we wrap them in another stream for
+         *   convenience, do not close that stream
+         * 2) We must be carefully about buffering, especially around input streams. We may want to use a BufferedReader
+         *   to conveniently read the header line by line using its readLine method. Then to read the body, if the body
+         *   must be read as binary, to use again the underlying InputStream. However, the BufferedReader may read ahead
+         *   from the underlying input stream more than what was needed for the header, so that when we try to read from
+         *   the underlying InputStream, we will miss the part of the body that was read by the BufferedReader into its
+         *   buffer.
          *
-         * Because this server does not support requests with bodies, I'm making some simplifications in this implementation.
-         * I'm wrapping the input stream in a BufferedReader, so we can use the readline methods to easily parse the header
-         * section using the BufferedReader.readLine(). This would not work if the requests had a body, because the body
-         * could potentially be binary, so we cannot read it with a reader, it would have to be read directly with the
-         * input stream.
+         * Because this server does not support requests with bodies, I can safely wrap the input stream in a
+         * BufferedReader and use it to read everything. But if ever this server is extended to support requests with
+         * bodies, we have to revise this decision, probably have to read only from the InputStream and parse the header
+         * ourselves.
          */
 
-        // Set the socket to timeout
+        // Set the socket to timeout to enforce keep-alive
         socket.setSoTimeout(keepAliveTimeoutMillis);
         try (var reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
              var bos = new BufferedOutputStream(socket.getOutputStream())) {
